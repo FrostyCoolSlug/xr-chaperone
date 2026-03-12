@@ -6,6 +6,9 @@ Blarp. Have rust, make sure monado (or other overlay compatible XR compositor) i
 cargo run --release
 ```
 
+**Note**: This project will likely only work in environments that have a static reference point for the play space
+(such as headsets that use lighthouses).
+
 Initial configuration will happen on your monitor, walk around your space with a controller, and pull the trigger to
 set corner points.
 
