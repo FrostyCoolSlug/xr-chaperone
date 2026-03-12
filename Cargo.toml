@@ -1,0 +1,46 @@
+[package]
+name = "xr-chaperone"
+description = "A tool to produce a chaperone inside an OpenXR compositor"
+authors = ["Craig McLure <craig@mclure.net>"]
+
+version = "0.1.0"
+edition = "2024"
+
+repository = "https://github.com/frostycoolslug/xr-chaperone"
+license = "MIT"
+categories = ["hardware-support"]
+
+build = "build.rs"
+
+[dependencies]
+# OpenXR + Vulkan
+openxr = { version = "0.21.1", features = ["linked"] }
+openxr-sys = "0.13.1"
+ash = "0.38"
+
+# Desktop UI
+iced = { version = "0.14.0", default-features = false, features = ["wayland", "x11", "canvas", "smol", "wgpu", "advanced"] }
+iced_color_wheel = "0.1.1"
+
+# Math
+glam = { version = "0.32.1", features = ["serde"] }
+bytemuck = { version = "1", features = ["derive"] }
+
+# Serialisation
+xdg = "3.0.0"
+serde = { version = "1", features = ["derive"] }
+toml = "1.0.6"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+
+# Shared States
+parking_lot = "0.12.5"
+
+[build-dependencies]
+shaderc = "0.10.1"
+
+[profile.release]
+opt-level = 3
