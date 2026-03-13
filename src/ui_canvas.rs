@@ -4,8 +4,9 @@
 use crate::ui::Message;
 use glam::Vec2;
 use iced::widget::canvas::{Frame, Path, Stroke};
-use iced::widget::{canvas, Action};
-use iced::{mouse, Color, Point, Rectangle, Size};
+use iced::widget::{Action, canvas};
+use iced::{Color, Point, Rectangle, Size, mouse};
+use openxr_sys::Posef;
 
 /// Half-width of the fixed world view in metres. The fixed canvas always
 /// represents a (VIEW_HALF*2) x (VIEW_HALF*2) metre area, regardless of
@@ -63,9 +64,9 @@ pub struct BoundaryCanvasState {
 /// Defines the canvas configuration, positions and modes
 pub struct BoundaryCanvas {
     pub points: Vec<Vec2>,
-    pub headset_pos: Option<Vec2>,
-    pub left_controller_pos: Option<Vec2>,
-    pub right_controller_pos: Option<Vec2>,
+    pub headset_pos: Option<Posef>,
+    pub left_controller_pos: Option<Posef>,
+    pub right_controller_pos: Option<Posef>,
     pub mode: CanvasMode,
 }
 
@@ -204,9 +205,21 @@ impl canvas::Program<Message> for BoundaryCanvas {
                     .points
                     .iter()
                     .copied()
-                    .chain(self.headset_pos)
-                    .chain(self.left_controller_pos)
-                    .chain(self.right_controller_pos)
+                    .chain(
+                        self.headset_pos
+                            .as_ref()
+                            .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
+                    )
+                    .chain(
+                        self.left_controller_pos
+                            .as_ref()
+                            .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
+                    )
+                    .chain(
+                        self.right_controller_pos
+                            .as_ref()
+                            .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
+                    )
                     .collect();
 
                 if let Some(ref canvas_transform) = fit_transform(size, &all_pts, 0.0, 24.0) {
@@ -278,9 +291,10 @@ pub fn world_to_canvas(p: Vec2, size: Size, transform: Option<&CanvasTransform>)
 /// Converts a canvas position to a world coordinate
 pub fn canvas_to_world(p: Point, size: Size, transform: Option<&CanvasTransform>) -> Vec2 {
     match transform {
-        Some(CanvasTransform { scale, offset, .. }) => {
-            Vec2::new((size.width - (p.x) - offset.x) / *scale, -(p.y - offset.y) / *scale)
-        }
+        Some(CanvasTransform { scale, offset, .. }) => Vec2::new(
+            (size.width - (p.x) - offset.x) / *scale,
+            -(p.y - offset.y) / *scale,
+        ),
         None => {
             let s = fixed_scale(size);
             Vec2::new((size.width / 2.0 - p.x) / s, -(p.y - size.height / 2.0) / s)
@@ -506,14 +520,22 @@ fn draw_tracked_positions(
         .iter()
         .chain(canvas.right_controller_pos.iter())
     {
+        let position = Vec2 {
+            x: pos.position.x,
+            y: pos.position.z,
+        };
         frame.fill(
-            &Path::circle(world_to_canvas(*pos, size, transform), 4.0),
+            &Path::circle(world_to_canvas(position, size, transform), 4.0),
             COLOUR_CONTROLLER,
         );
     }
-    if let Some(h) = canvas.headset_pos {
+    if let Some(pos) = canvas.headset_pos {
+        let position = Vec2 {
+            x: pos.position.x,
+            y: pos.position.z,
+        };
         frame.fill(
-            &Path::circle(world_to_canvas(h, size, transform), 4.0),
+            &Path::circle(world_to_canvas(position, size, transform), 4.0),
             COLOUR_HEADSET,
         );
     }

@@ -1,15 +1,17 @@
 use crate::app_state::{AppState, Phase};
 use crate::config::Config;
 use crate::ui_canvas::{
-    canvas_to_world, polygon_area, BoundaryCanvas, CanvasMode, CanvasTransform,
+    BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
 };
 use glam::Vec2;
 use iced::widget::Space;
 use iced::{
+    Color, Element, Length, Point, Size, Subscription, Task, Theme,
     widget::{button, canvas, column, container, row, scrollable, slider, text},
-    window, Color, Element, Length, Point, Size, Subscription, Task, Theme,
+    window,
 };
-use iced_color_wheel::{color_to_hsv, hsv_to_color, WheelProgram};
+use iced_color_wheel::{WheelProgram, color_to_hsv, hsv_to_color};
+use openxr_sys::Posef;
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -113,9 +115,9 @@ pub struct UiState {
     pub points: Vec<Vec2>,
 
     // Real-time tracked positions, refreshed each Tick
-    pub headset_pos: Option<Vec2>,
-    pub left_controller_pos: Option<Vec2>,
-    pub right_controller_pos: Option<Vec2>,
+    pub headset_pos: Option<Posef>,
+    pub left_controller_pos: Option<Posef>,
+    pub right_controller_pos: Option<Posef>,
 
     // UI-only state
     screen: Screen,
@@ -533,9 +535,11 @@ fn view_settings(state: &UiState) -> Element<'_, Message> {
 }
 
 fn view_setup(state: &UiState) -> Element<'_, Message> {
-    let mut action_row = row![button("Start Tracing")
-        .on_press(Message::StartTracing)
-        .padding(10)];
+    let mut action_row = row![
+        button("Start Tracing")
+            .on_press(Message::StartTracing)
+            .padding(10)
+    ];
     if state.cfg.boundary.len() >= 3 {
         action_row = action_row.push(cancel_btn());
     }

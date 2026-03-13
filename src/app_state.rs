@@ -1,6 +1,8 @@
 use crate::config::Config;
 use glam::Vec2;
+use openxr_sys::Posef;
 use parking_lot::Mutex;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -62,13 +64,13 @@ pub struct AppState {
     pub last_trigger_time: Option<Instant>,
 
     /// Real-time headset position
-    pub headset_pos: Option<Vec2>,
+    pub headset_pos: Option<Posef>,
 
     /// Real-time left controller position
-    pub left_controller_pos: Option<Vec2>,
+    pub left_controller_pos: Option<Posef>,
 
     /// Real-time right controller position
-    pub right_controller_pos: Option<Vec2>,
+    pub right_controller_pos: Option<Posef>,
 }
 
 impl AppState {
