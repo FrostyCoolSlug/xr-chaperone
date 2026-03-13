@@ -262,13 +262,13 @@ pub struct CanvasTransform {
 pub fn world_to_canvas(p: Vec2, size: Size, transform: Option<&CanvasTransform>) -> Point {
     match transform {
         Some(CanvasTransform { scale, offset, .. }) => Point {
-            x: p.x * *scale + offset.x,
+            x: size.width - (p.x * *scale + offset.x),
             y: -p.y * *scale + offset.y,
         },
         None => {
             let s = fixed_scale(size);
             Point {
-                x: size.width / 2.0 + p.x * s,
+                x: size.width / 2.0 - p.x * s,
                 y: size.height / 2.0 - p.y * s,
             }
         }
@@ -279,11 +279,11 @@ pub fn world_to_canvas(p: Vec2, size: Size, transform: Option<&CanvasTransform>)
 pub fn canvas_to_world(p: Point, size: Size, transform: Option<&CanvasTransform>) -> Vec2 {
     match transform {
         Some(CanvasTransform { scale, offset, .. }) => {
-            Vec2::new((p.x - offset.x) / *scale, -(p.y - offset.y) / *scale)
+            Vec2::new((size.width - (p.x) - offset.x) / *scale, -(p.y - offset.y) / *scale)
         }
         None => {
             let s = fixed_scale(size);
-            Vec2::new((p.x - size.width / 2.0) / s, -(p.y - size.height / 2.0) / s)
+            Vec2::new((size.width / 2.0 - p.x) / s, -(p.y - size.height / 2.0) / s)
         }
     }
 }
