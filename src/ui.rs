@@ -1,5 +1,5 @@
 use crate::app_state::{AppState, Phase};
-use crate::config::Config;
+use crate::config::{Config, Pose};
 use crate::ui_canvas::{
     BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
 };
@@ -16,7 +16,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 // Which screen we're supposed to be displaying
 #[derive(Debug, Clone, PartialEq)]
@@ -99,7 +99,9 @@ impl SettingsEdit {
             grid_spacing: self.grid_spacing,
             line_width: self.line_width,
             grid_colour: [self.colour.r, self.colour.g, self.colour.b, self.colour.a],
+
             boundary: base.boundary.clone(),
+            headset_offset: base.headset_offset.clone(),
         }
     }
 }
@@ -246,12 +248,25 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
 
         // Fun stuff below, the actual tracing / rendering loop
         Message::StartTracing => {
+            info!("Tracing Started");
+
             state.prev_edit = if state.cfg.boundary.len() >= 3 {
                 Some(state.cfg.clone())
             } else {
                 None
             };
+
+            // Ok, we need to grab the current headset position, and store it, the actual
+            // value written will come at the end once it's committed, and we can get the correct
+            // offset based on the existing one from monado.
             let mut s = state.shared.lock();
+            if let Some(pos) = s.headset_pos {
+                state.cfg.headset_offset = Some(Pose::from(pos));
+            } else {
+                state.cfg.headset_offset = None;
+                warn!("Headset Pose Not found!")
+            }
+
             s.trace_points.clear();
             s.phase = Phase::Drawing;
         }
@@ -293,6 +308,9 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
             state.prev_edit = None;
             let cfg = state.cfg.clone();
             let path = state.cfg_path.clone();
+
+            // TODO: Get the 'final' offset from monado after applying new offset to current
+
             return Task::perform(
                 async move { save_config_full(&path, &cfg).await },
                 Message::SaveDone,

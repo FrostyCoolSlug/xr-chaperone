@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use glam::Vec2;
+use openxr_sys::Posef;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::warn;
@@ -14,6 +15,47 @@ pub struct BoundaryPoint {
 impl BoundaryPoint {
     pub fn to_vec2(&self) -> Vec2 {
         Vec2::new(self.x, self.z)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pose {
+    pub position: Vector3<f32>,
+    pub orientation: Quaternion<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Quaternion<T> {
+    /// Vector part of a quaternion.
+    pub vector: Vector3<T>,
+    /// Scalar part of a quaternion.
+    pub scalar: T,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Vector3<T> {
+    x: T,
+    y: T,
+    z: T,
+}
+
+impl From<Posef> for Pose {
+    fn from(value: Posef) -> Self {
+        Pose {
+            position: Vector3 {
+                x: value.position.x,
+                y: value.position.y,
+                z: value.position.z,
+            },
+            orientation: Quaternion {
+                vector: Vector3 {
+                    x: value.orientation.x,
+                    y: value.orientation.y,
+                    z: value.orientation.z,
+                },
+                scalar: value.orientation.w,
+            },
+        }
     }
 }
 
@@ -47,6 +89,9 @@ pub struct Config {
     /// The play area boundary points, must have at least 3 to render
     #[serde(default)]
     pub boundary: Vec<BoundaryPoint>,
+
+    #[serde(default)]
+    pub headset_offset: Option<Pose>,
 }
 
 fn default_fade_start() -> f32 {
@@ -115,6 +160,7 @@ impl Default for Config {
             grid_spacing: default_grid_spacing(),
             line_width: default_line_width(),
             grid_colour: default_grid_colour(),
+            headset_offset: None,
         }
     }
 }
