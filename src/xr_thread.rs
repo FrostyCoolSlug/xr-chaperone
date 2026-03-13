@@ -512,11 +512,13 @@ fn update_positions_and_controllers(
 
     let mut s = state.lock();
 
+    // Always update the positional data
     s.right_controller_pos = right_loc.map(|loc| loc.pose);
     s.left_controller_pos = left_loc.map(|loc| loc.pose);
     s.headset_pos = head_loc.map(|loc| loc.pose);
 
     if tracing {
+        // If we're tracing, check button presses and behaviours
         let right_pressed = right_trigger > 0.5;
         let left_pressed = left_trigger > 0.5;
         let either_pressed = right_pressed || left_pressed;
