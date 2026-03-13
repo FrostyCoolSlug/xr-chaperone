@@ -521,20 +521,9 @@ fn update_positions_and_controllers(
 
     let mut s = state.lock();
 
-    s.right_controller_pos = right_loc.map(|loc| {
-        let p = loc.pose.position;
-        Vec2::new(p.x, p.z)
-    });
-
-    s.left_controller_pos = left_loc.map(|loc| {
-        let p = loc.pose.position;
-        Vec2::new(p.x, p.z)
-    });
-
-    if let Some(loc) = head_loc {
-        let p = loc.pose.position;
-        s.headset_pos = Some(Vec2::new(p.x, p.z));
-    }
+    s.right_controller_pos = right_loc.map(|loc| loc.pose);
+    s.left_controller_pos = left_loc.map(|loc| loc.pose);
+    s.headset_pos = head_loc.map(|loc| loc.pose);
 
     if tracing {
         let right_pressed = right_trigger > 0.5;
@@ -549,7 +538,10 @@ fn update_positions_and_controllers(
             };
 
             if let Some(pos) = trace_pos {
-                s.push_trace_point(pos);
+                s.push_trace_point(Vec2 {
+                    x: pos.position.x,
+                    y: pos.position.z,
+                });
             }
         }
         *was_trigger_pressed = either_pressed;
