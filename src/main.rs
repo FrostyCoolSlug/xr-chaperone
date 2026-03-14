@@ -10,11 +10,12 @@ mod xr_session;
 mod xr_thread;
 
 use crate::app_state::XRState;
+use crate::monado::{set_adjusted_offset, set_initial_offset};
 use anyhow::{Result, bail};
 use app_state::AppState;
 use config::Config;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 use xdg::BaseDirectories;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
@@ -74,6 +75,13 @@ fn main() -> Result<()> {
             ui::error(err)?;
         }
         XRState::Running => {
+            // Load the offsets into monado if configured
+            if let Some(offset) = cfg.headset_offset.clone() {
+                if let Err(e) = set_initial_offset(offset) {
+                    error!("Failed to Set Offsets: {}", e);
+                }
+            }
+
             ui::run(state, cfg, cfg_path)?;
         }
     }

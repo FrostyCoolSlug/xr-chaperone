@@ -225,7 +225,7 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
             &xr,
             &state,
             display_time,
-            false,
+            phase == Phase::Drawing,
             &mut was_trigger_pressed,
         );
 

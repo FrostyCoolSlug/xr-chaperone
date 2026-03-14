@@ -1,6 +1,6 @@
 use crate::app_state::{AppState, Phase};
 use crate::config::{BoundaryPoint, Config, Pose};
-use crate::monado::set_offset;
+use crate::monado::set_adjusted_offset;
 use crate::ui_canvas::{
     BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
 };
@@ -266,7 +266,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
 
                 // We need to set this immediately, otherwise the points we capture will
                 // be pre-offset and broken. So fire off to monado now, we can reset later.
-                match set_offset(Pose::from(pos)) {
+                match set_adjusted_offset(Pose::from(pos)) {
                     Ok(offset) => {
                         info!("Headset Offset: {:?}", offset);
                         state.cfg.headset_offset = Some(offset)
@@ -322,9 +322,6 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
             state.prev_edit = None;
             let cfg = state.cfg.clone();
             let path = state.cfg_path.clone();
-
-            // TODO: Get the 'final' offset from monado after applying new offset to current
-
             return Task::perform(
                 async move { save_config_full(&path, &cfg).await },
                 Message::SaveDone,
@@ -346,7 +343,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
 
                 // We need to reset our offset to the previous value
                 if let Some(offset) = state.cfg.headset_offset.clone() {
-                    if let Err(e) = set_offset(offset) {
+                    if let Err(e) = set_adjusted_offset(offset) {
                         warn!("Unable to Set Offset, Clearning Data: {}", e);
                         state.cfg.headset_offset = None;
                     }
