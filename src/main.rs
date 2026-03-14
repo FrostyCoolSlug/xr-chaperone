@@ -17,9 +17,17 @@ use config::Config;
 use std::sync::Arc;
 use tracing::{error, info};
 use xdg::BaseDirectories;
+use argh::FromArgs;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const CONFIG_FILE: &str = "chaperone.toml";
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh( description = "xr-chaperone")]
+pub struct CliArgs {
+    #[argh(switch, short = 's', description = "run without a GUI for use in a systemd service, don't use this if you haven't configured xr-chaperone with the GUI at least once.")]
+    service_mode: bool,
+}
 
 /// Entry point, loads the config, starts the xr thread, spawns the interface
 fn main() -> Result<()> {
@@ -29,6 +37,7 @@ fn main() -> Result<()> {
         )
         .init();
 
+    let cli_args: CliArgs = argh::from_env();
     let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
     let cfg_path = xdg_dirs.place_config_file(CONFIG_FILE);
     if let Err(e) = cfg_path {
@@ -82,7 +91,13 @@ fn main() -> Result<()> {
                 error!("Failed to Set Offsets: {}", e);
             }
 
-            ui::run(state, cfg, cfg_path)?;
+            if cli_args.service_mode == false {
+                ui::run(state, cfg, cfg_path)?;
+            } else {
+                loop { // Otherwise the main thread will just exit
+                    std::thread::sleep(std::time::Duration::from_millis(100000000000));
+                }
+            }
         }
     }
 
