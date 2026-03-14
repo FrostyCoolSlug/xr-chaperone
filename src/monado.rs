@@ -68,6 +68,8 @@ pub fn set_initial_offset(input: config::Pose) -> Result<()> {
     info!("{:?}", origin.name);
 
     // Set the required offset
+    // let original = origin.get_offset()?;
+    // input.orientation
     origin.set_offset(input)?;
 
     // Return the merged offset
@@ -83,9 +85,6 @@ pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
     // Convert the config pose into a Monado Pose
     let input = Pose::from(input);
 
-    // Invert the input, as we need to apply this to the existing offset
-    let input = invert_pose(&input);
-
     // We'll grab the first tracking origin, we'll work under the assumption there's only one
     // for now, this is probably bad, but we can handle it better later.
     let origin = monado
@@ -99,8 +98,6 @@ pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
 
     let current = origin.get_offset()?;
     let merged = apply_offset(&input, &current);
-
-    // Set the required offset
     origin.set_offset(merged)?;
 
     // Return the merged offset
@@ -108,20 +105,17 @@ pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
 }
 
 fn apply_offset(offset: &Pose, input: &Pose) -> Pose {
-    // Combined rotation: offset.orientation * input.orientation
-    let orientation = multiply_quaternions(&offset.orientation, &input.orientation);
-
-    // Combined position: offset.position + rotate(offset.orientation, input.position)
-    let rotated = rotate_vector_by_quaternion(&offset.orientation, &input.position);
+    // Invert the input, so it becomes additive on the existing offsets
+    let input = invert_pose(input);
     let position = Vector3 {
-        x: offset.position.x + rotated.x,
-        y: offset.position.y + rotated.y,
-        z: offset.position.z + rotated.z,
+        x: offset.position.x + input.position.x,
+        y: offset.position.y + input.position.y,
+        z: offset.position.z + input.position.z,
     };
 
     Pose {
         position,
-        orientation,
+        orientation: input.orientation,
     }
 }
 
@@ -166,6 +160,7 @@ fn rotate_vector_by_quaternion(q: &Quaternion<f32>, v: &Vector3<f32>) -> Vector3
     }
 }
 
+#[allow(unused)]
 fn multiply_quaternions(a: &Quaternion<f32>, b: &Quaternion<f32>) -> Quaternion<f32> {
     Quaternion {
         v: Vector3 {
