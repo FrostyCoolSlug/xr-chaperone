@@ -1,5 +1,6 @@
 use crate::app_state::{AppState, Phase};
-use crate::config::{Config, Pose};
+use crate::config::{BoundaryPoint, Config, Pose};
+use crate::monado::set_offset;
 use crate::ui_canvas::{
     BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
 };
@@ -261,7 +262,20 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
             // offset based on the existing one from monado.
             let mut s = state.shared.lock();
             if let Some(pos) = s.headset_pos {
-                state.cfg.headset_offset = Some(Pose::from(pos));
+                info!("Headset Position: {:?}", pos);
+
+                // We need to set this immediately, otherwise the points we capture will
+                // be pre-offset and broken. So fire off to monado now, we can reset later.
+                match set_offset(Pose::from(pos)) {
+                    Ok(offset) => {
+                        info!("Headset Offset: {:?}", offset);
+                        state.cfg.headset_offset = Some(offset)
+                    }
+                    Err(e) => {
+                        warn!("Unable to set headset Pose: {}", e);
+                        state.cfg.headset_offset = None;
+                    }
+                }
             } else {
                 state.cfg.headset_offset = None;
                 warn!("Headset Pose Not found!")
@@ -303,7 +317,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
             state.points = points.clone();
             state.cfg.boundary = points
                 .iter()
-                .map(|p| crate::config::BoundaryPoint { x: p.x, z: p.y })
+                .map(|p| BoundaryPoint { x: p.x, z: p.y })
                 .collect();
             state.prev_edit = None;
             let cfg = state.cfg.clone();
@@ -329,6 +343,15 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                 s.phase = Phase::Active;
 
                 state.cfg = previous.clone();
+
+                // We need to reset our offset to the previous value
+                if let Some(offset) = state.cfg.headset_offset.clone() {
+                    if let Err(e) = set_offset(offset) {
+                        warn!("Unable to Set Offset, Clearning Data: {}", e);
+                        state.cfg.headset_offset = None;
+                    }
+                }
+
                 state.phase = Phase::Active;
             } else {
                 let mut s = state.shared.lock();
@@ -566,7 +589,7 @@ fn view_setup(state: &UiState) -> Element<'_, Message> {
         column![
             text("XR Chaperone Setup").size(28),
             text("").size(8),
-            text("1. Place your headset in the middle of your play area").size(16),
+            text("1. Place your headset on the floor in the middle of your play area").size(16),
             text("2. Click Start Tracing below.").size(16),
             text("3. Walk around the play area, pulling the trigger on corners").size(16),
             text("4. Click Done when you have traced the full boundary").size(16),
@@ -574,8 +597,7 @@ fn view_setup(state: &UiState) -> Element<'_, Message> {
             action_row.spacing(16),
         ]
         .spacing(6)
-        .padding(40)
-        .align_x(iced::Center),
+        .padding(40),
     )
     .width(Length::Fill)
     .height(Length::Fill)
