@@ -2,6 +2,7 @@ mod app_state;
 mod boundary;
 mod config;
 mod mesh;
+mod monado;
 mod renderer;
 mod ui;
 mod ui_canvas;
@@ -9,7 +10,7 @@ mod xr_session;
 mod xr_thread;
 
 use crate::app_state::XRState;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use app_state::AppState;
 use config::Config;
 use std::sync::Arc;

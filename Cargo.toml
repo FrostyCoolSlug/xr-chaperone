@@ -17,6 +17,7 @@ build = "build.rs"
 openxr = { version = "0.21.1", features = ["linked"] }
 openxr-sys = "0.13.1"
 ash = "0.38"
+libmonado = "1.6.0"
 
 # Desktop UI
 iced = { version = "0.14.0", default-features = false, features = ["wayland", "x11", "canvas", "smol", "wgpu", "advanced"] }
@@ -25,6 +26,7 @@ iced_color_wheel = "0.1.1"
 # Math
 glam = { version = "0.32.1", features = ["serde"] }
 bytemuck = { version = "1", features = ["derive"] }
+mint = "0.5.9"
 
 # Serialisation
 xdg = "3.0.0"

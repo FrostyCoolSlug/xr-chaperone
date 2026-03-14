@@ -34,9 +34,9 @@ pub struct Quaternion<T> {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Vector3<T> {
-    x: T,
-    y: T,
-    z: T,
+    pub(crate) x: T,
+    pub(crate) y: T,
+    pub(crate) z: T,
 }
 
 impl From<Posef> for Pose {
