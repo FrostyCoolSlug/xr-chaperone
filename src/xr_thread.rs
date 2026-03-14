@@ -13,7 +13,7 @@ use crate::boundary;
 use crate::config::Config;
 use crate::mesh;
 use crate::renderer::{ChaperoneRenderer, EyeSwapChain};
-use crate::xr_session::{projection_from_fov, view_from_pose, VulkanContext, XrContext};
+use crate::xr_session::{VulkanContext, XrContext, projection_from_fov, view_from_pose};
 
 const NEAR: f32 = 0.05;
 const FAR: f32 = 100.0;
@@ -307,11 +307,20 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
                     cfg.fade_end,
                 );
 
-                let (_flags, views) = xr.session.locate_views(
+                let (flags, views) = xr.session.locate_views(
                     xr::ViewConfigurationType::PRIMARY_STEREO,
                     display_time,
                     &xr.stage,
                 )?;
+
+                // Make sure the poses are valid, and we haven't lost tracking before attempting to render
+                if !flags.contains(
+                    xr::ViewStateFlags::ORIENTATION_VALID | xr::ViewStateFlags::POSITION_VALID,
+                ) {
+                    xr.frame_stream
+                        .end(display_time, preferred_blend_mode, &[])?;
+                    continue;
+                }
 
                 // Ok, complicated rendery bit...
                 // For each eye, acquire a fresh swapchain image, render the chaperone mesh into it,
