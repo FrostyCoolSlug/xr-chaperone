@@ -220,6 +220,15 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
         let display_time = frame_state.predicted_display_time;
         let phase = state.lock().phase.clone();
 
+        // Always update the positions and controllers, regardless of state
+        update_positions_and_controllers(
+            &xr,
+            &state,
+            display_time,
+            false,
+            &mut was_trigger_pressed,
+        );
+
         match phase {
             Phase::Unconfigured | Phase::Review => {
                 xr.frame_stream
@@ -227,15 +236,6 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
             }
 
             Phase::Drawing => {
-                // Controller position is updated here so the UI thread can render a live
-                // preview of what the user is actively configuring.
-                update_positions_and_controllers(
-                    &xr,
-                    &state,
-                    display_time,
-                    true,
-                    &mut was_trigger_pressed,
-                );
                 xr.frame_stream
                     .end(display_time, preferred_blend_mode, &[])?;
             }
@@ -277,15 +277,6 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
                         &cfg,
                     )?;
                 }
-
-                // Now we update the controller and headset positions
-                update_positions_and_controllers(
-                    &xr,
-                    &state,
-                    display_time,
-                    false,
-                    &mut was_trigger_pressed,
-                );
 
                 // Collect the positions of all tracked items
                 // TODO: Check other devices? (Ex: Tracking Pucks)
