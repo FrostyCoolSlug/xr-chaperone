@@ -40,6 +40,7 @@ anyhow = "1"
 
 # Shared States
 parking_lot = "0.12.5"
+argh = "0.1.18"
 
 [build-dependencies]
 shaderc = "0.10.1"
