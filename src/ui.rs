@@ -342,11 +342,11 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                 state.cfg = previous.clone();
 
                 // We need to reset our offset to the previous value
-                if let Some(offset) = state.cfg.headset_offset.clone() {
-                    if let Err(e) = set_adjusted_offset(offset) {
-                        warn!("Unable to Set Offset, Clearning Data: {}", e);
-                        state.cfg.headset_offset = None;
-                    }
+                if let Some(offset) = state.cfg.headset_offset.clone()
+                    && let Err(e) = set_adjusted_offset(offset)
+                {
+                    warn!("Unable to Set Offset, Clearning Data: {}", e);
+                    state.cfg.headset_offset = None;
                 }
 
                 state.phase = Phase::Active;

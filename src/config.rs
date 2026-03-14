@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::warn;
 
-/// A point on the boundry (we don't need Y, as it represents up
+/// A point on the boundary (we don't need Y, as it represents up
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundaryPoint {
     pub x: f32,
@@ -24,6 +24,13 @@ pub struct Pose {
     pub orientation: Quaternion<f32>,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Vector3<T> {
+    pub(crate) x: T,
+    pub(crate) y: T,
+    pub(crate) z: T,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Quaternion<T> {
     /// Vector part of a quaternion.
@@ -32,11 +39,68 @@ pub struct Quaternion<T> {
     pub scalar: T,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct Vector3<T> {
-    pub(crate) x: T,
-    pub(crate) y: T,
-    pub(crate) z: T,
+impl Quaternion<f32> {
+    /// Returns this Quaternion as just a Yaw value
+    pub fn yaw_only(&self) -> Quaternion<f32> {
+        Quaternion::from_yaw(self.to_yaw())
+    }
+
+    /// Extracts the yaw angle (rotation around Y axis) in radians.
+    pub fn to_yaw(&self) -> f32 {
+        let w = self.scalar;
+        let x = self.vector.x;
+        let y = self.vector.y;
+        let z = self.vector.z;
+
+        f32::atan2(2.0 * (w * y + x * z), 1.0 - 2.0 * (y * y + x * x))
+    }
+
+    /// Creates a yaw-only orientation from an angle in radians.
+    pub fn from_yaw(yaw: f32) -> Self {
+        let half = yaw / 2.0;
+        Quaternion {
+            scalar: half.cos(),
+            vector: Vector3 {
+                x: 0.0,
+                y: half.sin(),
+                z: 0.0,
+            },
+        }
+    }
+
+    /// Applies a yaw rotation on top of an existing orientation.
+    pub fn with_yaw(self, yaw: f32) -> Self {
+        let yaw_quat = Quaternion::from_yaw(yaw);
+        yaw_quat.mul(&self)
+    }
+
+    /// Quaternion multiplication (Hamilton product).
+    pub fn mul(&self, rhs: &Quaternion<f32>) -> Quaternion<f32> {
+        let (w1, x1, y1, z1) = (self.scalar, self.vector.x, self.vector.y, self.vector.z);
+        let (w2, x2, y2, z2) = (rhs.scalar, rhs.vector.x, rhs.vector.y, rhs.vector.z);
+
+        Quaternion {
+            scalar: w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            vector: Vector3 {
+                x: w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                y: w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                z: w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            },
+        }
+    }
+}
+
+impl Default for Quaternion<f32> {
+    fn default() -> Self {
+        Self {
+            vector: Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            scalar: 1.0,
+        }
+    }
 }
 
 impl From<Posef> for Pose {
@@ -55,6 +119,23 @@ impl From<Posef> for Pose {
                 },
                 scalar: value.orientation.w,
             },
+        }
+    }
+}
+
+impl Pose {
+    /// Provides the pose removing all orientation data except yaw
+    pub fn with_only_yaw(self) -> Self {
+        Pose {
+            position: self.position,
+            orientation: self.orientation.yaw_only(),
+        }
+    }
+
+    pub fn with_default_orientation(self) -> Self {
+        Pose {
+            position: self.position,
+            orientation: Default::default(),
         }
     }
 }

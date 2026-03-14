@@ -10,7 +10,7 @@ mod xr_session;
 mod xr_thread;
 
 use crate::app_state::XRState;
-use crate::monado::{set_adjusted_offset, set_initial_offset};
+use crate::monado::set_initial_offset;
 use anyhow::{Result, bail};
 use app_state::AppState;
 use config::Config;
@@ -76,10 +76,10 @@ fn main() -> Result<()> {
         }
         XRState::Running => {
             // Load the offsets into monado if configured
-            if let Some(offset) = cfg.headset_offset.clone() {
-                if let Err(e) = set_initial_offset(offset) {
-                    error!("Failed to Set Offsets: {}", e);
-                }
+            if let Some(offset) = cfg.headset_offset.clone()
+                && let Err(e) = set_initial_offset(offset)
+            {
+                error!("Failed to Set Offsets: {}", e);
             }
 
             ui::run(state, cfg, cfg_path)?;

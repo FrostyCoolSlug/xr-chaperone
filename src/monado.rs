@@ -54,7 +54,7 @@ pub fn set_initial_offset(input: config::Pose) -> Result<()> {
     debug!("Connected to Monado, Version: {}", api_version);
 
     // Convert the config pose into a Monado Pose
-    let input = Pose::from(input);
+    let input = Pose::from(input.with_only_yaw());
 
     // We'll grab the first tracking origin, we'll work under the assumption there's only one
     // for now, this is probably bad, but we can handle it better later.
@@ -68,8 +68,6 @@ pub fn set_initial_offset(input: config::Pose) -> Result<()> {
     info!("{:?}", origin.name);
 
     // Set the required offset
-    // let original = origin.get_offset()?;
-    // input.orientation
     origin.set_offset(input)?;
 
     // Return the merged offset
@@ -83,7 +81,7 @@ pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
     debug!("Connected to Monado, Version: {}", api_version);
 
     // Convert the config pose into a Monado Pose
-    let input = Pose::from(input);
+    let input = Pose::from(input.with_only_yaw());
 
     // We'll grab the first tracking origin, we'll work under the assumption there's only one
     // for now, this is probably bad, but we can handle it better later.
@@ -98,29 +96,32 @@ pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
 
     let current = origin.get_offset()?;
     let merged = apply_offset(&input, &current);
+
+    // Set the new offset
     origin.set_offset(merged)?;
 
     // Return the merged offset
     Ok(merged.into())
 }
 
-fn apply_offset(offset: &Pose, input: &Pose) -> Pose {
-    // Invert the input, so it becomes additive on the existing offsets
-    let input = invert_pose(input);
+fn apply_offset(offset: &Pose, current: &Pose) -> Pose {
+    let input = invert_pose(offset);
+    let orientation = multiply_quaternions(&current.orientation, &input.orientation);
+
+    // Don't rotate the position, just combine directly
     let position = Vector3 {
-        x: offset.position.x + input.position.x,
-        y: offset.position.y + input.position.y,
-        z: offset.position.z + input.position.z,
+        x: current.position.x + input.position.x,
+        y: current.position.y + input.position.y,
+        z: current.position.z + input.position.z,
     };
 
     Pose {
         position,
-        orientation: input.orientation,
+        orientation,
     }
 }
 
 fn invert_pose(pose: &Pose) -> Pose {
-    // Conjugate of quaternion (assumes normalized)
     let q_inv = Quaternion {
         v: Vector3 {
             x: -pose.orientation.v.x,
@@ -160,7 +161,6 @@ fn rotate_vector_by_quaternion(q: &Quaternion<f32>, v: &Vector3<f32>) -> Vector3
     }
 }
 
-#[allow(unused)]
 fn multiply_quaternions(a: &Quaternion<f32>, b: &Quaternion<f32>) -> Quaternion<f32> {
     Quaternion {
         v: Vector3 {
