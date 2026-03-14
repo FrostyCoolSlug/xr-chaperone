@@ -44,7 +44,37 @@ impl From<Pose> for config::Pose {
     }
 }
 
-pub fn set_offset(input: config::Pose) -> Result<config::Pose> {
+// TODO: We can probably tidy this up
+// Both the setters do the same thing with tiny differences, so we can probably handle this better
+
+pub fn set_initial_offset(input: config::Pose) -> Result<()> {
+    // For the initial pass, we don't do any bonus calculations, we just set it to whatever is defined.
+    let monado = Monado::auto_connect().map_err(|e| anyhow::anyhow!("{}", e))?;
+    let api_version = monado.get_api_version();
+    debug!("Connected to Monado, Version: {}", api_version);
+
+    // Convert the config pose into a Monado Pose
+    let input = Pose::from(input);
+
+    // We'll grab the first tracking origin, we'll work under the assumption there's only one
+    // for now, this is probably bad, but we can handle it better later.
+    let origin = monado
+        .tracking_origins()?
+        .into_iter()
+        .next()
+        .ok_or(anyhow::anyhow!(
+            "No tracking origins found in Monado, cannot apply offset"
+        ))?;
+    info!("{:?}", origin.name);
+
+    // Set the required offset
+    origin.set_offset(input)?;
+
+    // Return the merged offset
+    Ok(())
+}
+
+pub fn set_adjusted_offset(input: config::Pose) -> Result<config::Pose> {
     // OK, lets take some steps here... Firstly, attempt to connect to monado
     let monado = Monado::auto_connect().map_err(|e| anyhow::anyhow!("{}", e))?;
     let api_version = monado.get_api_version();
