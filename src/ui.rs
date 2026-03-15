@@ -4,7 +4,7 @@ use crate::monado::{
     clear_stage_offset, set_adjusted_offset, set_initial_offset, set_stage_offset,
 };
 use crate::ui_canvas::{
-    BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
+    BoundaryCanvas, CanvasMode, CanvasTransform, Positions, canvas_to_world, polygon_area,
 };
 use glam::Vec2;
 use iced::widget::Space;
@@ -128,6 +128,9 @@ pub struct UiState {
     // The last stage offset
     old_stage_offset: Option<Posef>,
 
+    // The current stage offset (for UI alignment)
+    pub stage_offset: Option<Posef>,
+
     // UI-only state
     screen: Screen,
     drag_vertex: Option<usize>,
@@ -156,6 +159,7 @@ pub fn run(shared: Arc<Mutex<AppState>>, cfg: Config, cfg_path: PathBuf) -> iced
                 left_controller_pos: None,
                 right_controller_pos: None,
                 old_stage_offset: None,
+                stage_offset: None,
                 screen: Screen::Main,
                 drag_vertex: None,
                 prev_edit: None,
@@ -196,6 +200,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                 Phase::Active => s.polygon.clone(),
                 _ => s.trace_points.clone(),
             };
+            state.stage_offset = s.stage_reference_offset;
 
             // We have monado, we're in the Drawing phase, there's no headset offset, and our await has gone false.
             // This should mean that a stage reset has complete, so we need to handle it.
@@ -487,9 +492,12 @@ fn cancel_btn<'a>() -> Element<'a, Message> {
 fn boundary_canvas(state: &UiState, mode: CanvasMode) -> Element<'_, Message> {
     canvas(BoundaryCanvas {
         points: state.points.clone(),
-        headset_pos: state.headset_pos,
-        left_controller_pos: state.left_controller_pos,
-        right_controller_pos: state.right_controller_pos,
+        positions: Positions {
+            headset_pos: state.headset_pos,
+            left_controller_pos: state.left_controller_pos,
+            right_controller_pos: state.right_controller_pos,
+        },
+        stage_offset: state.stage_offset,
         mode,
     })
     .width(Length::Fill)

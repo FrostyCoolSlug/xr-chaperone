@@ -55,19 +55,26 @@ pub enum CanvasMode {
 /// The state of the canvas, tracks the current point being dragged, and the fitting points
 /// for rendering in FittedEditable to prevent the canvas expanding while nodes are being
 /// shifted.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BoundaryCanvasState {
     pub dragging: Option<usize>,
     pub last_fitted: Option<CanvasTransform>,
 }
 
 /// Defines the canvas configuration, positions and modes
+#[derive(Clone)]
 pub struct BoundaryCanvas {
     pub points: Vec<Vec2>,
+    pub positions: Positions,
+    pub stage_offset: Option<Posef>,
+    pub mode: CanvasMode,
+}
+
+#[derive(Copy, Clone)]
+pub struct Positions {
     pub headset_pos: Option<Posef>,
     pub left_controller_pos: Option<Posef>,
     pub right_controller_pos: Option<Posef>,
-    pub mode: CanvasMode,
 }
 
 impl canvas::Program<Message> for BoundaryCanvas {
@@ -175,20 +182,21 @@ impl canvas::Program<Message> for BoundaryCanvas {
         let size = bounds.size();
         let mut frame = Frame::new(renderer, size);
 
+        let positions = self.positions;
         match &self.mode {
             CanvasMode::Fixed { closed } => {
                 // Use generic helpers with None transform for fixed mode
                 let transform = None;
                 draw_grid(&mut frame, size, transform);
                 draw_polygon(&mut frame, &self.points, *closed, transform, size);
-                draw_tracked_positions(&mut frame, self, transform, size);
+                draw_tracked_positions(&mut frame, &positions, transform, size);
             }
             CanvasMode::FittedEditable => {
                 let transform = state.last_fitted.as_ref();
                 draw_grid(&mut frame, size, transform);
                 if let Some(canvas_transform) = transform {
                     draw_polygon(&mut frame, &self.points, true, Some(canvas_transform), size);
-                    draw_tracked_positions(&mut frame, self, Some(canvas_transform), size);
+                    draw_tracked_positions(&mut frame, &positions, Some(canvas_transform), size);
                     draw_edge_midpoints(&mut frame, &self.points, canvas_transform);
                     draw_vertices(
                         &mut frame,
@@ -201,22 +209,28 @@ impl canvas::Program<Message> for BoundaryCanvas {
                 }
             }
             CanvasMode::Fitted { closed } => {
+                let adjusted_positions =
+                    apply_offset_to_positions(&positions, self.stage_offset.as_ref());
+
                 let all_pts: Vec<Vec2> = self
                     .points
                     .iter()
                     .copied()
                     .chain(
-                        self.headset_pos
+                        adjusted_positions
+                            .headset_pos
                             .as_ref()
                             .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
                     )
                     .chain(
-                        self.left_controller_pos
+                        adjusted_positions
+                            .left_controller_pos
                             .as_ref()
                             .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
                     )
                     .chain(
-                        self.right_controller_pos
+                        adjusted_positions
+                            .right_controller_pos
                             .as_ref()
                             .map(|pose| Vec2::new(pose.position.x, pose.position.z)),
                     )
@@ -226,7 +240,7 @@ impl canvas::Program<Message> for BoundaryCanvas {
                     let transform = Some(canvas_transform);
                     draw_grid(&mut frame, size, transform);
                     draw_polygon(&mut frame, &self.points, *closed, transform, size);
-                    draw_tracked_positions(&mut frame, self, transform, size);
+                    draw_tracked_positions(&mut frame, &adjusted_positions, transform, size);
                 }
             }
         }
@@ -511,14 +525,14 @@ fn draw_vertices(
 /// Unified tracked positions drawing helper for both fixed and transformed modes
 fn draw_tracked_positions(
     frame: &mut Frame,
-    canvas: &BoundaryCanvas,
+    positions: &Positions,
     transform: Option<&CanvasTransform>,
     size: Size,
 ) {
-    for pos in canvas
+    for pos in positions
         .left_controller_pos
         .iter()
-        .chain(canvas.right_controller_pos.iter())
+        .chain(positions.right_controller_pos.iter())
     {
         let position = Vec2 {
             x: pos.position.x,
@@ -529,7 +543,7 @@ fn draw_tracked_positions(
             COLOUR_CONTROLLER,
         );
     }
-    if let Some(pos) = canvas.headset_pos {
+    if let Some(pos) = positions.headset_pos {
         let position = Vec2 {
             x: pos.position.x,
             y: pos.position.z,
@@ -538,5 +552,26 @@ fn draw_tracked_positions(
             &Path::circle(world_to_canvas(position, size, transform), 4.0),
             COLOUR_HEADSET,
         );
+    }
+}
+
+fn apply_offset_to_positions(positions: &Positions, offset: Option<&Posef>) -> Positions {
+    let Some(offset) = offset else {
+        return *positions;
+    };
+    let shift = |pose: Option<Posef>| -> Option<Posef> {
+        pose.map(|p| Posef {
+            position: openxr_sys::Vector3f {
+                x: p.position.x + offset.position.x,
+                y: p.position.y + offset.position.y,
+                z: p.position.z + offset.position.z,
+            },
+            orientation: p.orientation,
+        })
+    };
+    Positions {
+        headset_pos: shift(positions.headset_pos),
+        left_controller_pos: shift(positions.left_controller_pos),
+        right_controller_pos: shift(positions.right_controller_pos),
     }
 }
