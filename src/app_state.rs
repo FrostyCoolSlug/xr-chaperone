@@ -72,6 +72,9 @@ pub struct AppState {
     /// Real-time right controller position
     pub right_controller_pos: Option<Posef>,
 
+    /// Set to true when the monado thread is running
+    pub monado_available: bool,
+
     /// Stage reference offset provided by monado
     pub stage_reference_offset: Option<Posef>,
 }
@@ -90,6 +93,7 @@ impl AppState {
             headset_pos: None,
             left_controller_pos: None,
             right_controller_pos: None,
+            monado_available: false,
             stage_reference_offset: None,
         }))
     }
