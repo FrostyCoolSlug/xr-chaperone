@@ -6,7 +6,8 @@ use ash::vk::Handle;
 use glam::{Mat4, Vec2};
 use openxr as xr;
 use openxr_sys::Posef;
-use parking_lot::Mutex;
+use parking_lot::lock_api::MutexGuard;
+use parking_lot::{Mutex, RawMutex};
 use tracing::{info, warn};
 
 use crate::app_state::{AppState, Phase, XRState};
@@ -229,22 +230,38 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
         let phase = state.lock().phase.clone();
 
         // Consume the stage reference offset if it's been changed
-        let stage_offset_changed = match state.lock().stage_reference_offset.take() {
-            Some(offset) => {
-                last_stage_offset = Some(offset);
-                true
+        let stage_offset_changed = {
+            let mut lock = state.lock();
+            match lock.stage_reference_offset_change.take() {
+                Some(offset) => {
+                    info!("Stage Offset Changed!");
+
+                    last_stage_offset = Some(offset);
+                    lock.stage_reference_offset = Some(offset);
+                    true
+                }
+                None => false,
             }
-            None => false,
         };
 
-        // Always update the positions and controllers, regardless of state
-        update_positions_and_controllers(
-            &xr,
-            &state,
-            display_time,
-            phase == Phase::Drawing,
-            &mut was_trigger_pressed,
-        );
+        // We need to maintain a lock across this entire block, while statistically unlikely,
+        // it's theoretically possible that the UI can grab the state between us changing
+        // the stage reset and the new headset positon, resulting in badly offset calibration data
+        {
+            let mut state_lock = state.lock();
+            if stage_offset_changed && state_lock.stage_reset_await {
+                info!("Releasing lock..");
+                state_lock.stage_reset_await = false;
+            }
+
+            update_positions_and_controllers(
+                &xr,
+                &mut state_lock,
+                display_time,
+                phase == Phase::Drawing,
+                &mut was_trigger_pressed,
+            );
+        }
 
         match phase {
             Phase::Unconfigured | Phase::Review => {
@@ -506,7 +523,7 @@ fn rebuild_renderer_pipeline(
 /// Updates headset/controller positions and handles tracing logic.
 fn update_positions_and_controllers(
     xr: &XrContext,
-    state: &Arc<Mutex<AppState>>,
+    s: &mut MutexGuard<RawMutex, AppState>,
     display_time: xr::Time,
     tracing: bool,
     was_trigger_pressed: &mut bool,
@@ -531,8 +548,6 @@ fn update_positions_and_controllers(
         .state(&xr.session, xr::Path::NULL)
         .map(|s| s.current_state)
         .unwrap_or(0.0);
-
-    let mut s = state.lock();
 
     // Always update the positional data
     s.right_controller_pos = right_loc.map(|loc| loc.pose);
