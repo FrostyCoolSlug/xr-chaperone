@@ -16,6 +16,8 @@ use app_state::AppState;
 use argh::FromArgs;
 use config::Config;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use tracing::{error, info};
 use xdg::BaseDirectories;
 
@@ -71,13 +73,13 @@ fn main() -> Result<()> {
     // Spawn XR render thread
     let xr_state = Arc::clone(&state);
     let xr_cfg = cfg.clone();
-    let xr_thread_handle = std::thread::Builder::new()
+    let xr_thread_handle = thread::Builder::new()
         .name("xr-render".into())
         .spawn(move || xr_thread::run_xr_thread(xr_state, xr_cfg))?;
 
     // Wait until the XR thread says we're running before deciding what to show
     while state.lock().xr_state == XRState::Starting {
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(10));
     }
 
     let xr_state = state.lock().xr_state.clone();
@@ -95,7 +97,13 @@ fn main() -> Result<()> {
                 error!("Failed to Set Offsets: {}", e);
             }
 
-            if cli_args.service_mode == true {
+            // Attempt to spawn up the monado stage handler
+            let monitor_state = Arc::clone(&state);
+            thread::Builder::new()
+                .name("monado-monitor".into())
+                .spawn(move || monado::monitor_stage_reference_offset(monitor_state))?;
+
+            if cli_args.service_mode {
                 info!("Requested service mode, not starting the GUI.");
                 let _ = xr_thread_handle.join();
             } else {
