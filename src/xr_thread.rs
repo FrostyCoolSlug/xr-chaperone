@@ -3,8 +3,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use ash::vk;
 use ash::vk::Handle;
-use glam::{Mat4, Quat, Vec2, Vec3};
+use glam::{Mat4, Vec2};
 use openxr as xr;
+use openxr_sys::Posef;
 use parking_lot::Mutex;
 use tracing::{info, warn};
 
@@ -158,11 +159,12 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
     let mut renderers = build_renderers(&vk, &eye_swap_chains, &current_polygon, &cfg)?;
     rebuild_framebuffers(&vk, &mut eye_swap_chains, &renderers)?;
 
-    // The offset-adjusted polygon used for drwaing.
-    let mut effective_polygon: Vec<Vec2> = current_polygon.clone();
+    // The offset-adjusted polygon and model used for drawing
+    let mut polygon: Vec<Vec2> = current_polygon.clone();
+    let mut model = Mat4::IDENTITY;
 
     // The last seen stage offset
-    let mut last_stage_offset: Option<openxr_sys::Posef> = None;
+    let mut last_stage_offset: Option<Posef> = None;
 
     let mut session_running = false;
     let mut was_trigger_pressed = false;
@@ -292,17 +294,10 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
                         &cfg,
                     )?;
 
-                    // If we're rebuilding, we need to also apply the last stage offset so that
-                    // we don't move the chaperone back to its original position
-                    effective_polygon = match last_stage_offset {
-                        Some(ref offset) => apply_stage_offset_to_polygon(&current_polygon, offset),
-                        None => current_polygon.clone(),
-                    };
+                    (polygon, model) = build_offset_cache(&current_polygon, &last_stage_offset);
                 } else if stage_offset_changed {
-                    // Simply apply the offset to our existing base polygon
-                    if let Some(ref offset) = last_stage_offset {
-                        effective_polygon = apply_stage_offset_to_polygon(&current_polygon, offset);
-                    }
+                    // The stage offset has changed, update our positions
+                    (polygon, model) = build_offset_cache(&current_polygon, &last_stage_offset);
                 }
 
                 // Collect the positions of all tracked items
@@ -319,7 +314,7 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
 
                 // Determine opacity based on the items proximity to the boundary
                 let opacity = boundary::max_visibility(
-                    &effective_polygon,
+                    &polygon,
                     &proximity_positions,
                     cfg.fade_start,
                     cfg.fade_end,
@@ -351,9 +346,9 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
                     let img_idx = xr_swap_chains[eye_idx].acquire_image()? as usize;
                     xr_swap_chains[eye_idx].wait_image(xr::Duration::INFINITE)?;
 
-                    // Build the model-view-projection matrix for this eye's pose and field of view
-                    let mvp =
-                        projection_from_fov(&view.fov, NEAR, FAR) * view_from_pose(&view.pose);
+                    let mvp = projection_from_fov(&view.fov, NEAR, FAR)
+                        * view_from_pose(&view.pose)
+                        * model;
 
                     // Record the draw commands for the chaperone mesh into a command buffer
                     let cb = unsafe {
@@ -568,22 +563,27 @@ fn update_positions_and_controllers(
     }
 }
 
-/// Applies the Stage reference space offset to the polygon so the grid stays anchored
-fn apply_stage_offset_to_polygon(polygon: &[Vec2], offset: &openxr_sys::Posef) -> Vec<Vec2> {
-    let rotation = Quat::from_xyzw(
-        offset.orientation.x,
-        offset.orientation.y,
-        offset.orientation.z,
-        offset.orientation.w,
-    );
-    let translation = Vec3::new(offset.position.x, offset.position.y, offset.position.z);
-    let transform = Mat4::from_rotation_translation(rotation, translation);
+/// Builds and returns the Polygon and Model based on an offset
+fn build_offset_cache(polygon: &[Vec2], offset: &Option<Posef>) -> (Vec<Vec2>, Mat4) {
+    if let Some(offset) = offset {
+        let polygon = build_polygon_from_offset(polygon, offset);
+        let model = build_model_from_offset(offset);
+        return (polygon, model);
+    }
+    (Vec::from(polygon), Mat4::IDENTITY)
+}
 
+fn build_polygon_from_offset(polygon: &[Vec2], offset: &Posef) -> Vec<Vec2> {
     polygon
         .iter()
-        .map(|p| {
-            let transformed = transform.transform_point3(glam::Vec3::new(p.x, 0.0, p.y));
-            Vec2::new(transformed.x, transformed.z)
-        })
-        .collect()
+        .map(|v| Vec2::new(v.x - offset.position.x, v.y - offset.position.z))
+        .collect::<Vec<_>>()
+}
+
+fn build_model_from_offset(offset: &Posef) -> Mat4 {
+    Mat4::from_translation(glam::Vec3::new(
+        -offset.position.x,
+        -offset.position.y,
+        -offset.position.z,
+    ))
 }
