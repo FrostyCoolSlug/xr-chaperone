@@ -4,7 +4,8 @@ use anyhow::Result;
 use libmonado::{Monado, Pose, ReferenceSpaceType};
 use mint::{Quaternion, Vector3};
 use openxr_sys::{Posef, Quaternionf, Vector3f};
-use parking_lot::Mutex;
+use parking_lot::lock_api::MutexGuard;
+use parking_lot::{Mutex, RawMutex};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -48,6 +49,52 @@ impl From<Pose> for config::Pose {
             },
         }
     }
+}
+
+// Stage Reference Changers
+pub fn clear_stage_offset(app_state: &mut MutexGuard<RawMutex, AppState>) -> Result<()> {
+    let monado = Monado::auto_connect().map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    // We need to reset the stage positional data, but maintain the orientation data
+    let current = monado.get_reference_space_offset(ReferenceSpaceType::Stage)?;
+    let pose = Pose {
+        position: Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        //orientation: current.orientation,
+        orientation: Quaternion {
+            v: Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            s: 1.0,
+        },
+    };
+
+    if pose == current {
+        // This will not trigger a 'change' event because it's doing nothing, nor do we need
+        // to send it. Flag it as done in the app_state, to be handled by the XR thread.
+        //
+        // We might need a cleaner way to handle this, because we're crossing streams somewhat.
+        app_state.stage_reference_offset_change = Some(pose_to_posef(&pose));
+        return Ok(());
+    }
+
+    monado
+        .set_reference_space_offset(ReferenceSpaceType::Stage, pose)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))
+}
+
+pub fn set_stage_offset(pose: Posef) -> Result<()> {
+    let monado = Monado::auto_connect().map_err(|e| anyhow::anyhow!("{}", e))?;
+    let pose = posef_to_pose(&pose);
+
+    monado
+        .set_reference_space_offset(ReferenceSpaceType::Stage, pose)
+        .map_err(|e| anyhow::anyhow!("{:?}", e))
 }
 
 // TODO: We can probably tidy this up
@@ -223,11 +270,8 @@ pub fn monitor_stage_reference_offset(state: Arc<Mutex<AppState>>) {
 
                 // If we've changed, set the new ref in the state.
                 if changed {
-                    debug!(
-                        "Stage reference space offset changed: pos=({:.4}, {:.4}, {:.4})",
-                        pose.position.x, pose.position.y, pose.position.z
-                    );
-                    state.lock().stage_reference_offset = Some(pose_to_posef(&pose));
+                    debug!("Stage reference space offset changed: {:?}", pose);
+                    state.lock().stage_reference_offset_change = Some(pose_to_posef(&pose));
                     last_pose = Some(pose);
                 }
             }
@@ -258,6 +302,24 @@ fn pose_to_posef(pose: &Pose) -> Posef {
             y: pose.orientation.v.y,
             z: pose.orientation.v.z,
             w: pose.orientation.s,
+        },
+    }
+}
+
+fn posef_to_pose(pose: &Posef) -> Pose {
+    Pose {
+        position: Vector3 {
+            x: pose.position.x,
+            y: pose.position.y,
+            z: pose.position.z,
+        },
+        orientation: Quaternion {
+            v: Vector3 {
+                x: pose.orientation.x,
+                y: pose.orientation.y,
+                z: pose.orientation.z,
+            },
+            s: pose.orientation.w,
         },
     }
 }
