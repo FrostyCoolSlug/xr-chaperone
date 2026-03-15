@@ -1,8 +1,14 @@
+use crate::app_state::AppState;
 use crate::config;
 use anyhow::Result;
-use libmonado::{Monado, Pose};
+use libmonado::{Monado, Pose, ReferenceSpaceType};
 use mint::{Quaternion, Vector3};
-use tracing::{debug, info};
+use openxr_sys::{Posef, Quaternionf, Vector3f};
+use parking_lot::Mutex;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+use tracing::{debug, info, warn};
 
 impl From<config::Pose> for Pose {
     fn from(value: config::Pose) -> Self {
@@ -169,5 +175,89 @@ fn multiply_quaternions(a: &Quaternion<f32>, b: &Quaternion<f32>) -> Quaternion<
             z: a.s * b.v.z + a.v.x * b.v.y - a.v.y * b.v.x + a.v.z * b.s,
         },
         s: a.s * b.s - a.v.x * b.v.x - a.v.y * b.v.y - a.v.z * b.v.z,
+    }
+}
+
+////////// Stage Offset Management
+
+/// Simple thread which monitors for changes to stage offset
+pub fn monitor_stage_reference_offset(state: Arc<Mutex<AppState>>) {
+    let monado = match Monado::auto_connect() {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Stage offset monitor: could not connect to Monado: {e}");
+            return;
+        }
+    };
+
+    // Should be connected and running, flag us as active
+    info!("Stage offset monitor connected to Monado");
+    state.lock().monado_available = true;
+
+    // libmonado::Pose doesn't implement PartialEq, so we'll do it here.
+    let poses_differ = |a: &Pose, b: &Pose| -> bool {
+        a.position.x != b.position.x
+            || a.position.y != b.position.y
+            || a.position.z != b.position.z
+            || a.orientation.v.x != b.orientation.v.x
+            || a.orientation.v.y != b.orientation.v.y
+            || a.orientation.v.z != b.orientation.v.z
+            || a.orientation.s != b.orientation.s
+    };
+
+    let mut last_pose: Option<Pose> = None;
+    loop {
+        // If anything is calling for an exit, stop the thread.
+        if state.lock().ui_exit_requested || state.lock().xr_exit_requested {
+            break;
+        }
+
+        // Fetch the offset for the stage
+        match monado.get_reference_space_offset(ReferenceSpaceType::Stage) {
+            Ok(pose) => {
+                // If the last pose is None, or it doesn't match the new pose, flag changed.
+                let changed = last_pose
+                    .as_ref()
+                    .map(|prev| poses_differ(prev, &pose))
+                    .unwrap_or(true); // first read always writes
+
+                // If we've changed, set the new ref in the state.
+                if changed {
+                    debug!(
+                        "Stage reference space offset changed: pos=({:.4}, {:.4}, {:.4})",
+                        pose.position.x, pose.position.y, pose.position.z
+                    );
+                    state.lock().stage_reference_offset = Some(pose_to_posef(&pose));
+                    last_pose = Some(pose);
+                }
+            }
+            Err(e) => {
+                warn!("Stage offset monitor: get_reference_space_offset failed: {e:?}");
+            }
+        }
+
+        // We don't need to be too heavy on this, 100ms should be fine
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    // Loop has ended, this thread is about to die, flag us as unavailable
+    state.lock().monado_available = false;
+    info!("Stage offset monitor exiting.");
+}
+
+/// Converts a monado pose to an OpenXR posef
+fn pose_to_posef(pose: &Pose) -> Posef {
+    Posef {
+        position: Vector3f {
+            x: pose.position.x,
+            y: pose.position.y,
+            z: pose.position.z,
+        },
+        orientation: Quaternionf {
+            x: pose.orientation.v.x,
+            y: pose.orientation.v.y,
+            z: pose.orientation.v.z,
+            w: pose.orientation.s,
+        },
     }
 }
