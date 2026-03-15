@@ -75,8 +75,15 @@ pub struct AppState {
     /// Set to true when the monado thread is running
     pub monado_available: bool,
 
-    /// Stage reference offset provided by monado
+    /// The current stage offset
     pub stage_reference_offset: Option<Posef>,
+
+    /// Set when the monado code finds an offset change, handled by xr_thread
+    pub stage_reference_offset_change: Option<Posef>,
+
+    /// When we recalibrate, the stage offset needs to be reset, this bool is true while that
+    /// reset is occurring, the UI thread sets it to true, the xr_thread sets it to false
+    pub stage_reset_await: bool,
 }
 
 impl AppState {
@@ -95,6 +102,8 @@ impl AppState {
             right_controller_pos: None,
             monado_available: false,
             stage_reference_offset: None,
+            stage_reference_offset_change: None,
+            stage_reset_await: false,
         }))
     }
 
