@@ -1,6 +1,8 @@
 use crate::app_state::{AppState, Phase};
 use crate::config::{BoundaryPoint, Config, Pose};
-use crate::monado::set_adjusted_offset;
+use crate::monado::{
+    clear_stage_offset, set_adjusted_offset, set_initial_offset, set_stage_offset,
+};
 use crate::ui_canvas::{
     BoundaryCanvas, CanvasMode, CanvasTransform, canvas_to_world, polygon_area,
 };
@@ -17,7 +19,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 // Which screen we're supposed to be displaying
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +51,7 @@ pub enum Message {
 
     // Boundary workflow
     StartTracing,
+    RecalibrationReady,
     StopTracing,
     ConfirmPolygon,
     ReTrace,
@@ -122,6 +125,9 @@ pub struct UiState {
     pub left_controller_pos: Option<Posef>,
     pub right_controller_pos: Option<Posef>,
 
+    // The last stage offset
+    old_stage_offset: Option<Posef>,
+
     // UI-only state
     screen: Screen,
     drag_vertex: Option<usize>,
@@ -149,6 +155,7 @@ pub fn run(shared: Arc<Mutex<AppState>>, cfg: Config, cfg_path: PathBuf) -> iced
                 headset_pos: None,
                 left_controller_pos: None,
                 right_controller_pos: None,
+                old_stage_offset: None,
                 screen: Screen::Main,
                 drag_vertex: None,
                 prev_edit: None,
@@ -189,6 +196,16 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                 Phase::Active => s.polygon.clone(),
                 _ => s.trace_points.clone(),
             };
+
+            // We have monado, we're in the Drawing phase, there's no headset offset, and our await has gone false.
+            // This should mean that a stage reset has complete, so we need to handle it.
+            if s.monado_available
+                && !s.stage_reset_await
+                && state.cfg.headset_offset.is_none()
+                && state.phase == Phase::Drawing
+            {
+                return Task::done(Message::RecalibrationReady);
+            }
         }
 
         Message::OpenSettings => {
@@ -257,15 +274,39 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                 None
             };
 
-            // Ok, we need to grab the current headset position, and store it, the actual
-            // value written will come at the end once it's committed, and we can get the correct
-            // offset based on the existing one from monado.
+            // We need to calibrate the headset position, but only if monado is available.
             let mut s = state.shared.lock();
-            if let Some(pos) = s.headset_pos {
-                info!("Headset Position: {:?}", pos);
+            s.trace_points.clear();
 
-                // We need to set this immediately, otherwise the points we capture will
-                // be pre-offset and broken. So fire off to monado now, we can reset later.
+            if s.monado_available {
+                debug!("Current Headset Pose: {:?}", s.headset_pos);
+
+                // We need to clear any existing stage reference
+                debug!("Performing a Stage offset Reset");
+                if let Err(e) = clear_stage_offset(&mut s) {
+                    warn!("Unable to reset stage reference: {}", e);
+                } else {
+                    state.old_stage_offset = s.stage_reference_offset;
+                    info!("Old Stage Offset: {:?}", state.old_stage_offset);
+                    s.stage_reset_await = true;
+                    state.cfg.headset_offset = None;
+                }
+            } else {
+                // Monado isn't available, so we don't do anything special here
+                info!("Monado not available, skipping calibration.");
+                state.cfg.headset_offset = None;
+            }
+
+            s.phase = Phase::Drawing;
+        }
+
+        Message::RecalibrationReady => {
+            // Ok, we should be fully reset now, so pull out the headset position and set the offset
+            let pos = state.shared.lock().headset_pos;
+            if let Some(pos) = pos {
+                debug!("Original Offset: {:?}", state.cfg.headset_offset);
+                debug!("New Offset: {:?}", pos);
+
                 match set_adjusted_offset(Pose::from(pos)) {
                     Ok(offset) => {
                         info!("Headset Offset: {:?}", offset);
@@ -276,13 +317,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
                         state.cfg.headset_offset = None;
                     }
                 }
-            } else {
-                state.cfg.headset_offset = None;
-                warn!("Headset Pose Not found!")
             }
-
-            s.trace_points.clear();
-            s.phase = Phase::Drawing;
         }
 
         // Stop capturing and move to the review screen if enough points exist.
@@ -330,6 +365,7 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
 
         // Cancel an in-progress edit, restoring the previous boundary if one existed.
         Message::CancelEdit => {
+            // Restore the stage offset if present
             if let Some(ref previous) = state.prev_edit {
                 let mut s = state.shared.lock();
                 s.polygon = previous
@@ -341,12 +377,18 @@ fn update(state: &mut UiState, msg: Message) -> Task<Message> {
 
                 state.cfg = previous.clone();
 
-                // We need to reset our offset to the previous value
-                if let Some(offset) = state.cfg.headset_offset.clone()
-                    && let Err(e) = set_adjusted_offset(offset)
+                if s.monado_available
+                    && let Some(offset) = state.cfg.headset_offset.take()
                 {
-                    warn!("Unable to Set Offset, Clearning Data: {}", e);
-                    state.cfg.headset_offset = None;
+                    if let Err(e) = set_initial_offset(offset) {
+                        warn!("Unable to Set Offset, Clearning Data: {}", e);
+                    } else {
+                        if let Some(offset) = state.old_stage_offset.take()
+                            && let Err(e) = set_stage_offset(offset)
+                        {
+                            warn!("Failed to restore Stage offset: {}", e);
+                        }
+                    }
                 }
 
                 state.phase = Phase::Active;
