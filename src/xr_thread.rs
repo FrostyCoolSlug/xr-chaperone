@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use ash::vk;
 use ash::vk::Handle;
-use glam::Vec2;
+use glam::{Mat4, Quat, Vec2, Vec3};
 use openxr as xr;
 use parking_lot::Mutex;
 use tracing::{info, warn};
@@ -158,6 +158,12 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
     let mut renderers = build_renderers(&vk, &eye_swap_chains, &current_polygon, &cfg)?;
     rebuild_framebuffers(&vk, &mut eye_swap_chains, &renderers)?;
 
+    // The offset-adjusted polygon used for drwaing.
+    let mut effective_polygon: Vec<Vec2> = current_polygon.clone();
+
+    // The last seen stage offset
+    let mut last_stage_offset: Option<openxr_sys::Posef> = None;
+
     let mut session_running = false;
     let mut was_trigger_pressed = false;
 
@@ -220,6 +226,15 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
         let display_time = frame_state.predicted_display_time;
         let phase = state.lock().phase.clone();
 
+        // Consume the stage reference offset if it's been changed
+        let stage_offset_changed = match state.lock().stage_reference_offset.take() {
+            Some(offset) => {
+                last_stage_offset = Some(offset);
+                true
+            }
+            None => false,
+        };
+
         // Always update the positions and controllers, regardless of state
         update_positions_and_controllers(
             &xr,
@@ -276,6 +291,18 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
                         &current_polygon,
                         &cfg,
                     )?;
+
+                    // If we're rebuilding, we need to also apply the last stage offset so that
+                    // we don't move the chaperone back to its original position
+                    effective_polygon = match last_stage_offset {
+                        Some(ref offset) => apply_stage_offset_to_polygon(&current_polygon, offset),
+                        None => current_polygon.clone(),
+                    };
+                } else if stage_offset_changed {
+                    // Simply apply the offset to our existing base polygon
+                    if let Some(ref offset) = last_stage_offset {
+                        effective_polygon = apply_stage_offset_to_polygon(&current_polygon, offset);
+                    }
                 }
 
                 // Collect the positions of all tracked items
@@ -292,7 +319,7 @@ fn xr_main(state: Arc<Mutex<AppState>>, mut cfg: Config) -> Result<()> {
 
                 // Determine opacity based on the items proximity to the boundary
                 let opacity = boundary::max_visibility(
-                    &current_polygon,
+                    &effective_polygon,
                     &proximity_positions,
                     cfg.fade_start,
                     cfg.fade_end,
@@ -539,4 +566,24 @@ fn update_positions_and_controllers(
         }
         *was_trigger_pressed = either_pressed;
     }
+}
+
+/// Applies the Stage reference space offset to the polygon so the grid stays anchored
+fn apply_stage_offset_to_polygon(polygon: &[Vec2], offset: &openxr_sys::Posef) -> Vec<Vec2> {
+    let rotation = Quat::from_xyzw(
+        offset.orientation.x,
+        offset.orientation.y,
+        offset.orientation.z,
+        offset.orientation.w,
+    );
+    let translation = Vec3::new(offset.position.x, offset.position.y, offset.position.z);
+    let transform = Mat4::from_rotation_translation(rotation, translation);
+
+    polygon
+        .iter()
+        .map(|p| {
+            let transformed = transform.transform_point3(glam::Vec3::new(p.x, 0.0, p.y));
+            Vec2::new(transformed.x, transformed.z)
+        })
+        .collect()
 }
