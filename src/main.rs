@@ -13,19 +13,23 @@ use crate::app_state::XRState;
 use crate::monado::set_initial_offset;
 use anyhow::{Result, bail};
 use app_state::AppState;
+use argh::FromArgs;
 use config::Config;
 use std::sync::Arc;
 use tracing::{error, info};
 use xdg::BaseDirectories;
-use argh::FromArgs;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const CONFIG_FILE: &str = "chaperone.toml";
 
 #[derive(FromArgs, PartialEq, Debug)]
-#[argh( description = "xr-chaperone")]
+#[argh(description = "xr-chaperone")]
 pub struct CliArgs {
-    #[argh(switch, short = 's', description = "run without a GUI for use in a systemd service, don't use this if you haven't configured xr-chaperone with the GUI at least once.")]
+    #[argh(
+        switch,
+        short = 's',
+        description = "run without a GUI for use in a systemd service, don't use this if you haven't configured xr-chaperone with the GUI at least once."
+    )]
     service_mode: bool,
 }
 
@@ -93,7 +97,7 @@ fn main() -> Result<()> {
 
             if cli_args.service_mode == true {
                 info!("Requested service mode, not starting the GUI.");
-                let res = xr_thread_handle.join();
+                let _ = xr_thread_handle.join();
             } else {
                 ui::run(state, cfg, cfg_path)?;
             }
