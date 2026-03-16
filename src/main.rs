@@ -39,7 +39,7 @@ pub struct CliArgs {
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::new("xr_chaperone=debug,iced=debug,app_state=debug,xr_thread=debug,boundary=debug,renderer=debug,mesh=debug,ui=debug")
+            tracing_subscriber::EnvFilter::new("xr_chaperone=debug,iced=warn,app_state=debug,xr_thread=debug,boundary=debug,renderer=debug,mesh=debug,ui=debug")
         )
         .init();
 
