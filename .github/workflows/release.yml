@@ -1,0 +1,80 @@
+name: Build AppImage
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed to create GitHub Releases and upload assets
+
+jobs:
+  build-appimage:
+    name: Build AppImage (x86_64)
+    runs-on: ubuntu-22.04  # Ubuntu 22.04 keeps glibc old enough for broad compatibility
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Grab Rust, and caching
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      # Dependencies for building and packaging
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake python3 \
+            libwayland-dev libxkbcommon-dev \
+            libx11-dev libxcb1-dev \
+            pkg-config \
+            libvulkan-dev \
+            file \
+            wget
+
+      # Build it
+      - name: Build release binary
+        run: cargo build --release
+
+      # Grab LinuxDeploy
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      # Package the AppImage
+      - name: Build AppImage
+        env:
+          ARCH: x86_64
+          OUTPUT: xr-chaperone-x86_64.AppImage
+        run: |
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable target/release/xr-chaperone \
+            --desktop-file resources/xr-chaperone.desktop \
+            --icon-file resources/xr-chaperone.png \
+            --output appimage
+
+      # Upload the AppImage
+      - name: Upload AppImage as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr-chaperone-x86_64
+          path: xr-chaperone-x86_64.AppImage
+          retention-days: 90
+
+      # Create a GitHub Release and upload the AppImage as an asset if this is a tagged release
+      - name: Create GitHub Release and upload AppImage
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: xr-chaperone-x86_64.AppImage
+          generate_release_notes: true
