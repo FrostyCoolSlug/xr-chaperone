@@ -20,7 +20,7 @@ ash = "0.38"
 libmonado = "1.6.0"
 
 # Desktop UI
-iced = { version = "0.14.0", default-features = false, features = ["wayland", "x11", "canvas", "smol", "wgpu", "advanced"] }
+iced = { version = "0.14.0", default-features = false, features = ["wayland", "x11", "canvas", "smol", "wgpu", "advanced", "image"] }
 iced_color_wheel = "0.1.1"
 
 # Math

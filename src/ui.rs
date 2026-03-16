@@ -21,6 +21,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
+// Import the icon
+const ICON_BYTES: &[u8] = include_bytes!("../resources/xr-chaperone.png");
+
 // Which screen we're supposed to be displaying
 #[derive(Debug, Clone, PartialEq)]
 enum Screen {
@@ -141,6 +144,7 @@ pub struct UiState {
 }
 
 pub fn run(shared: Arc<Mutex<AppState>>, cfg: Config, cfg_path: PathBuf) -> iced::Result {
+    let icon = window::icon::from_file_data(ICON_BYTES, None).ok();
     iced::application(
         move || {
             let shared = shared.clone();
@@ -172,7 +176,12 @@ pub fn run(shared: Arc<Mutex<AppState>>, cfg: Config, cfg_path: PathBuf) -> iced
     )
     .title("XR Chaperone")
     .theme(|_: &UiState| -> Theme { Theme::Dark })
-    .window_size((680, 800))
+    .window(window::Settings {
+        icon,
+        size: Size::new(680., 800.),
+        resizable: false,
+        ..Default::default()
+    })
     .subscription(subscription)
     .run()
 }
@@ -762,6 +771,7 @@ async fn save_config_full(path: &PathBuf, cfg: &Config) -> Result<(), String> {
 
 // ----- Tiny error box
 pub(crate) fn error(error: String) -> iced::Result {
+    let icon = window::icon::from_file_data(ICON_BYTES, None).ok();
     type Msg = ();
 
     fn error_view(state: &String) -> Element<'_, Msg> {
@@ -790,6 +800,7 @@ pub(crate) fn error(error: String) -> iced::Result {
     )
     .title("XR Chaperone - Error")
     .window(window::Settings {
+        icon,
         size: Size::new(500., 100.),
         resizable: false,
         ..Default::default()
