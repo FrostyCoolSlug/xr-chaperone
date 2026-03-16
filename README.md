@@ -1,31 +1,58 @@
-# xr-chaperone
+<div align="center">
+  <img src="resources/xr-chaperone.png" width="128" alt="xr-chaperone"/>
+  <h1>xr-chaperone</h1>
+  <p>I accidentally punched a wall, then walked into a desk, so made this.</p>
+</div>
 
-Blarp. Have rust, make sure monado (or other overlay compatible XR compositor) is running, then run:
+---
+
+xr-chaperone is a Steam Room Setup inspired chaperone system for OpenXR, once configured it'll render a grid around
+your playspace and light up when you get too close.
+
+> Early warning, while this should work on any overlay-capable OpenXR compositor, it's only been tested on Monado.
+> In addition, it's only been tested with the Valve Index, it should work with other headsets, but I have no idea how
+> well. Your mileage may vary. It also WILL have bugs, those happen, please report them :D
+
+----
+
+### Installation
+
+Currently there are no releases, but you can grab a prebuilt AppImage of the latest code from
+[here](https://nightly.link/frostycoolslug/xr-chaperone/workflows/release.yml/main/xr-chaperone-x86_64.zip).
+
+#### Build from Source
+
+Simple, checkout code, have rust and run:
 
 ```bash
 cargo run --release
 ```
 
-**Note**: This project will likely only work in environments that have a static reference point for the play space
-(such as headsets that use lighthouses).
+----
 
-Initial configuration will happen on your monitor, walk around your space with a controller, and pull the trigger to
-set corner points.
+### Usage
 
-Double pull the trigger on your last point to finish (or match up with the first point).
+Mostly, make sure your VR setup is running, run the app, then follow the on-screen instructions. Setup happens on your
+monitor, so you just need a controller.
 
-One done, perform any tuning you want on the screen, then hit save.
+**Service Mode** - If you want to run headlessly without a GUI, once you've set up your chaperone you can launch
+this app with the `-s` parameter which will stop it from spawning a window.
 
-Once done, the chaperone should be present in your VR space.
+----
 
-You can do bonus config from the settings button to tweak stuff.
+### Settings
 
-Warning: May segfault occasionally, try not to do anything too crazy. If you can reproduce, open an issue here :)
+Mostly self-explanatory, but here they are:
 
-Tested with the Valve index, should work with others, but I have no way to test. If it doesn't work with your headset,
-open an issue, and I'll see if I can work it out.
+| Setting      | Description                                     | Default |
+|--------------|-------------------------------------------------|---------|
+| Fade start   | Distance (m) at which the grid starts appearing | 0.75m   |
+| Fade end     | Distance (m) at which the grid is fully opaque  | 0.0m    |
+| Wall height  | How tall the grid walls are                     | 2.5m    |
+| Grid spacing | Size of each grid square                        | 0.4m    |
+| Line width   | Thickness of grid lines                         | 0.01m   |
+| Grid colour  | Colour of the grid (with alpha)                 | Blue    |
 
-I'll build an AppImage soonish (once I work out how :D), and add an icon at some point, and a desktop file so it can
-be integrated into envision for autostart, but for now, just run from source.
+----
 
 That is all.
