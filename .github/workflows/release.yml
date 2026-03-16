@@ -37,6 +37,7 @@ jobs:
             libx11-dev libxcb1-dev \
             pkg-config \
             libvulkan-dev \
+            libopenxr-dev \
             file \
             wget
 
