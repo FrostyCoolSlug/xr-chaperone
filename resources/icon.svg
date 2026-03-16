@@ -1,0 +1,20 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+    <!-- Draw the Boundary Box -->
+    <rect x="24" y="24" width="208" height="208" rx="12" ry="12" fill="none" stroke="#CCCCCC" stroke-width="8"/>
+    <!-- Grid Lines -->
+    <g stroke="#CCCCCC" stroke-width="4" stroke-opacity="0.6">
+        <!-- Horizontal Lines -->
+        <line x1="24" y1="66" x2="232" y2="66"/>
+        <line x1="24" y1="107" x2="232" y2="107"/>
+        <line x1="24" y1="149" x2="232" y2="149"/>
+        <line x1="24" y1="190" x2="232" y2="190"/>
+        <!-- Vertical Lines -->
+        <line x1="66" y1="24" x2="66" y2="232"/>
+        <line x1="128" y1="24" x2="128" y2="232"/>
+        <line x1="190" y1="24" x2="190" y2="232"/>
+    </g>
+    <!-- Little VR Headset thing -->
+    <rect x="76" y="97" width="104" height="62" rx="13" ry="13" fill="#3A3A3A" stroke="#CCCCCC" stroke-width="6"/>
+    <circle cx="102" cy="128" r="10" fill="#3A3A3A" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="154" cy="128" r="10" fill="#3A3A3A" stroke="#FFFFFF" stroke-width="2"/>
+</svg>
