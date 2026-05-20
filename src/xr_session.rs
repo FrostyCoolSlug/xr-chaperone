@@ -22,7 +22,7 @@ impl VulkanContext {
 
         type InstanceProcAddr = unsafe extern "system" fn(
             *const std::ffi::c_void,
-            *const i8,
+            *const std::ffi::c_char,
         )
             -> Option<unsafe extern "system" fn()>;
 
